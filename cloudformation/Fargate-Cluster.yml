@@ -8,6 +8,22 @@ Parameters:
     Type: Number
   ImageURI:
     Type: String
+  DBInstanceClass:
+    Type: String
+    Description: The ID of the second subnet to place the RDS instance into.
+    Default: db.t2.micro
+  DBName:
+    Type: String
+    Description: The name of the database that is created within the mysql instance.
+    Default: wordpress
+  DBUsername:
+    Type: String
+    Description: The master user name for the mysql instance.
+    Default: wordpress
+  DBpassword:
+    Type: String
+    Description: The master user password for the mysql instance.
+    Default: wordpress1234554321tfggcvyghcvrfgwerfq3e
 
 Resources:
 
@@ -59,6 +75,23 @@ Resources:
       AvailabilityZone: !Join ['', [!Ref "AWS::Region", 'd']]
       MapPublicIpOnLaunch: false
 
+  # Create a private Subnet
+  SubnetE:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 172.10.5.0/24
+      VpcId: !Ref VPC
+      AvailabilityZone: !Join ['', [!Ref "AWS::Region", 'e']]
+      MapPublicIpOnLaunch: false
+
+  # Create a private Subnet
+  SubnetF:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 172.10.6.0/24
+      VpcId: !Ref VPC
+      AvailabilityZone: !Join ['', [!Ref "AWS::Region", 'f']]
+      MapPublicIpOnLaunch: false
 
   # Create a route table to allow access to internet
   PublicRouteTable:
@@ -109,6 +142,20 @@ Resources:
       SubnetId: !Ref SubnetD
       RouteTableId: !Ref PrivateRouteTable
 
+  # Attach Private Route to SubnetE 
+  SubnetDPrivateRouteAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetE
+      RouteTableId: !Ref PrivateRouteTable
+
+  # Attach Private Route to SubnetF  
+  SubnetDPrivateRouteAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref SubnetF
+      RouteTableId: !Ref PrivateRouteTable    
+
   # Create an Internet Gateway
   InternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -133,6 +180,47 @@ Resources:
             Action: 'sts:AssumeRole'
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+
+  # DB securitygroups and DB setup
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Access to the RDS instance
+      VpcId: !Ref 'VPC'
+
+  DBSecurityGroupIngressFromECS:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      Description: Ingress from the ECS containers to the RDS instance
+      GroupId: !Ref DBSecurityGroup
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref ContainerSecurityGroup  
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for the RDS instance
+      DBSubnetGroupName: DBSubnetGroup
+      SubnetIds: 
+        - !Ref SubnetE
+        - !Ref SubnetF
+
+  DBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      AllocatedStorage: 20
+      DBInstanceClass: !Ref DBInstanceClass
+      DBName: !Ref DBName
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      Engine: MySQL
+      EngineVersion: 5.7
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBpassword
+      PubliclyAccessible: false
+      VPCSecurityGroups: 
+       - !Ref DBSecurityGroup
+        
+      
 
   #   Create EFS and security group
   EFSSecurityGroup:
@@ -205,7 +293,15 @@ Resources:
           PortMappings:
             - ContainerPort: !Ref ContainerPort
               HostPort: !Ref ContainerPort
-          
+          Environment: 
+            - Name: DB_HOST
+              Value: !GetAtt DBInstance.Endpoint.Address
+            - Name: DB_PASSWORD
+              Value: !Ref DBpassword
+            - Name: DB_NAME
+              Value: !Ref DBName
+            - Name: DB_USER
+              Value: !Ref DBUsername
           MountPoints: 
             - ContainerPath: /var/www/wp-content
               SourceVolume: wp-content       
