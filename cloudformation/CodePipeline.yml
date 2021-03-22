@@ -7,7 +7,7 @@ Parameters:
     Default: dev
   GithubUserName:
     Type: String
-    Default: ThejusAP
+    Default: mysimohanmc
   GithubRepo:
     Type: String
     Default: Fargate-ECSCluster-Cloudformation
